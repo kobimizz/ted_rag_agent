@@ -1,0 +1,5 @@
+fastapi~=0.128.0
+openai~=2.14.0
+pinecone~=8.0.0
+pandas~=2.3.3
+tqdm~=4.67.1
