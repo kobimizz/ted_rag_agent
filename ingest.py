@@ -1,3 +1,5 @@
+from importlib.metadata import metadata
+
 import pandas as pd
 from openai import OpenAI
 from pinecone import Pinecone
@@ -21,23 +23,38 @@ if __name__ == '__main__':
 
     df = pd.read_csv("small_ted.csv")
 
-    for _, row in tqdm(df.iterrows()):
+    texts, metadatas = [], []
+    for _, row in tqdm(df.iterrows(), total=len(df)):
         chunks = chunk_text(row["transcript"])
 
-        embs = []
         for idx, chunk in enumerate(chunks):
-            combined_txt = f"Title: {row['title']} Speaker: {row['speaker_1']}\n{chunk}"
-            response = client.embeddings.create(input=combined_txt, model='RPRTHPB-text-embedding-3-small')
-            embedding = response.data[0].embedding
-
-            embs.append({
-                "id": f"{row["talk_id"]}_{idx}",
-                "values": embedding,
+            texts.append(f"Title: {row['title']} Speaker: {row['speaker_1']}\n{chunk}")
+            metadatas.append({
+                "id": f"{row['talk_id']}_{idx}",
                 "metadata": {
-                    "talk_id": f"{row["talk_id"]}",
+                    "talk_id": str(row["talk_id"]),
                     "title": row["title"],
                     "speaker": row["speaker_1"],
                     "chunk": chunk
                 }
             })
-        index.upsert(embs)
+
+            if len(texts) > 100:
+                responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
+                embeddings = responses.data
+                vectors = []
+                for eid, embedding in enumerate(embeddings):
+                    vectors.append({
+                            "id": metadatas[idx]["id"],
+                            "values": embedding.embedding,
+                            "metadata": metadatas[idx]["metadata"]
+                        })
+                index.upsert(vectors)
+                texts, metadatas = [], []
+
+    if texts:
+        responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
+        vectors = [{ "id": metadatas[idx]["id"],
+                     "values": d.embedding,
+                     "metadata": metadatas[idx]["metadata"] } for idx, d in enumerate(responses.data)]
+        index.upsert(vectors)
