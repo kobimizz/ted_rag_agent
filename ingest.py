@@ -21,7 +21,7 @@ if __name__ == '__main__':
     pc = Pinecone(api_key=PINECONE_API)
     index = pc.Index("ted-talks")
 
-    df = pd.read_csv("small_ted.csv")
+    df = pd.read_csv("ted_talks_en.csv")
 
     texts, metadatas = [], []
     for _, row in tqdm(df.iterrows(), total=len(df)):
@@ -39,6 +39,7 @@ if __name__ == '__main__':
                 }
             })
 
+            # embed and upload in batches
             if len(texts) > 100:
                 responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
                 embeddings = responses.data
