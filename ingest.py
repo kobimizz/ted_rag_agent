@@ -1,5 +1,3 @@
-from importlib.metadata import metadata
-
 import pandas as pd
 from openai import OpenAI
 from pinecone import Pinecone
@@ -16,6 +14,14 @@ def chunk_text(transcript, chunk_size=CHUNK_SIZE, overlap=OVERLAP_RATIO):
     return chunks_lst
 
 
+def upload_embeds(texts, metadatas):
+    responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
+    vectors = [{"id": metadatas[eid]["id"],
+                "values": embedding.embedding,
+                "metadata": metadatas[eid]["metadata"]} for eid, embedding in enumerate(responses.data)]
+    return vectors
+
+
 if __name__ == '__main__':
     client = OpenAI(api_key=MODEL_API, base_url="https://api.llmod.ai")
     pc = Pinecone(api_key=PINECONE_API)
@@ -27,10 +33,10 @@ if __name__ == '__main__':
     for _, row in tqdm(df.iterrows(), total=len(df)):
         chunks = chunk_text(row["transcript"])
 
-        for idx, chunk in enumerate(chunks):
+        for cid, chunk in enumerate(chunks):
             texts.append(f"Title: {row['title']} Speaker: {row['speaker_1']}\n{chunk}")
             metadatas.append({
-                "id": f"{row['talk_id']}_{idx}",
+                "id": f"{row['talk_id']}_{cid}",
                 "metadata": {
                     "talk_id": str(row["talk_id"]),
                     "title": row["title"],
@@ -41,21 +47,10 @@ if __name__ == '__main__':
 
             # embed and upload in batches
             if len(texts) > 100:
-                responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
-                embeddings = responses.data
-                vectors = []
-                for eid, embedding in enumerate(embeddings):
-                    vectors.append({
-                            "id": metadatas[idx]["id"],
-                            "values": embedding.embedding,
-                            "metadata": metadatas[idx]["metadata"]
-                        })
+                vectors = upload_embeds(texts, metadatas)
                 index.upsert(vectors)
                 texts, metadatas = [], []
 
     if texts:
-        responses = client.embeddings.create(input=texts, model='RPRTHPB-text-embedding-3-small')
-        vectors = [{ "id": metadatas[idx]["id"],
-                     "values": d.embedding,
-                     "metadata": metadatas[idx]["metadata"] } for idx, d in enumerate(responses.data)]
+        vectors = upload_embeds(texts, metadatas)
         index.upsert(vectors)
