@@ -24,12 +24,13 @@ if __name__ == '__main__':
     for _, row in tqdm(df.iterrows()):
         chunks = chunk_text(row["transcript"])
 
+        embs = []
         for idx, chunk in enumerate(chunks):
             combined_txt = f"Title: {row['title']} Speaker: {row['speaker_1']}\n{chunk}"
             response = client.embeddings.create(input=combined_txt, model='RPRTHPB-text-embedding-3-small')
             embedding = response.data[0].embedding
 
-            index.upsert([{
+            embs.append({
                 "id": f"{row["talk_id"]}_{idx}",
                 "values": embedding,
                 "metadata": {
@@ -38,4 +39,5 @@ if __name__ == '__main__':
                     "speaker": row["speaker_1"],
                     "chunk": chunk
                 }
-            }])
+            })
+        index.upsert(embs)
